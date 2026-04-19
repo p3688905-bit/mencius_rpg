@@ -1,0 +1,782 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>孟子選：辭受之理 2D RPG 完整版</title>
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+TC:wght@400;700&family=Noto+Sans+TC:wght@400;700&display=swap" rel="stylesheet">
+    <style>
+        /* ========================================================================= */
+        /* 基礎設定 */
+        /* ========================================================================= */
+        * { box-sizing: border-box; margin: 0; padding: 0; user-select: none; }
+        
+        body { 
+            background-color: #111; display: grid; place-items: center; 
+            min-height: 100vh; margin: 0; font-family: 'Noto Sans TC', 'Microsoft JhengHei', sans-serif; 
+        }
+
+        /* 遊戲畫布 (固定 1280x720 比例) */
+        #game-board {
+            position: relative; width: 1280px; height: 720px; 
+            background-color: #2c3e50;
+            background-size: cover; background-position: center;
+            border-radius: 12px; box-shadow: 0 10px 40px rgba(0,0,0,0.9); 
+            overflow: hidden; border: 2px solid #d4af37;
+            transition: background-image 1s ease-in-out;
+        }
+
+        /* ========================================================================= */
+        /* UI 介面設計 */
+        /* ========================================================================= */
+        .screen-overlay {
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            background-color: rgba(0, 0, 0, 0.85); display: flex; flex-direction: column; 
+            justify-content: center; align-items: center; z-index: 200; transition: opacity 0.8s ease; 
+        }
+        .screen-overlay.hidden { opacity: 0; pointer-events: none; }
+        
+        #transition-flash {
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            background-color: #fff; z-index: 180; opacity: 0; pointer-events: none;
+            transition: opacity 1s ease-in-out;
+        }
+
+        .title-text {
+            font-size: 5.5rem; font-weight: 700; color: #f1c40f; font-family: 'Noto Serif TC', serif;
+            text-shadow: 3px 3px 15px rgba(0,0,0,0.9); margin-bottom: 10px; letter-spacing: 5px;
+        }
+        .subtitle-text { font-size: 2rem; color: #ecf0f1; margin-bottom: 30px; letter-spacing: 2px; line-height: 1.5; }
+        
+        .start-btn { 
+            font-size: 1.5rem; color: #000; background: #38bdf8; padding: 15px 40px; 
+            border-radius: 8px; font-weight: bold; cursor: pointer; border: none;
+            box-shadow: 0 0 20px rgba(56, 189, 248, 0.5); transition: 0.2s; animation: blink 1.5s infinite;
+            margin-top: 10px;
+        }
+        .start-btn:hover { transform: scale(1.05); }
+        .start-btn.gold { background: #f1c40f; box-shadow: 0 0 20px rgba(241, 196, 15, 0.5); }
+        @keyframes blink { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.02); } }
+
+        /* --- 本地音樂設定面板 --- */
+        .music-setup-panel {
+            background: rgba(30, 41, 59, 0.9); border: 2px solid #38bdf8; border-radius: 12px;
+            padding: 20px 30px; margin-bottom: 20px; display: flex; flex-direction: column;
+            gap: 15px; box-shadow: 0 5px 15px rgba(0,0,0,0.5); text-align: left; z-index: 201;
+        }
+        .music-setup-panel h3 { color: #38bdf8; margin-bottom: 5px; font-size: 1.3rem; text-align: center;}
+        .music-setup-panel label { color: #fff; font-size: 1.1rem; display: flex; justify-content: space-between; align-items: center; gap: 20px;}
+        .music-setup-panel input[type="file"] { color: #bdc3c7; font-size: 1rem; cursor: pointer; width: 220px; }
+        input[type="file"]::file-selector-button {
+            background: #2c3e50; color: #fff; border: 1px solid #f1c40f; 
+            padding: 8px 15px; border-radius: 4px; cursor: pointer; transition: 0.2s;
+        }
+        input[type="file"]::file-selector-button:hover { background: #f1c40f; color: #000; }
+
+        /* 音樂開關按鈕 */
+        #music-toggle {
+            position: absolute; top: 20px; left: 50%; transform: translateX(-50%);
+            background: rgba(0,0,0,0.8); padding: 10px 20px; border-radius: 8px;
+            color: #fff; font-size: 1.2rem; font-weight: bold; cursor: pointer;
+            border: 1px solid #38bdf8; z-index: 100; pointer-events: auto;
+            transition: all 0.2s ease; box-shadow: 0 4px 15px rgba(0,0,0,0.5);
+        }
+        #music-toggle:hover { background: #38bdf8; color: #000; }
+
+        /* HUD 狀態列 */
+        #hud-container {
+            position: absolute; top: 20px; left: 20px; right: 20px;
+            display: flex; justify-content: space-between; z-index: 50; pointer-events: none;
+        }
+        .hud-box {
+            background: rgba(0,0,0,0.8); padding: 15px 25px; border-radius: 8px; 
+            font-size: 1.2rem; color: #fff; line-height: 1.6; border: 1px solid #d4af37;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.5); pointer-events: none;
+        }
+        .score-highlight { color: #f1c40f; font-weight: bold; font-size: 1.4rem; }
+        
+        /* 系統提示 */
+        #notification {
+            position: absolute; top: 100px; right: 20px; background: rgba(0,0,0,0.9); color: #fff; 
+            padding: 12px 25px; border-left: 5px solid #f1c40f; border-radius: 6px; z-index: 100; 
+            font-size: 1.2rem; transform: translateX(120%); transition: transform 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+            font-weight: bold; box-shadow: 0 5px 15px rgba(0,0,0,0.5);
+        }
+        #notification.show { transform: translateX(0); }
+
+        /* ========================================================================= */
+        /* 角色與 NPC 實體 */
+        /* ========================================================================= */
+        .entity { 
+            position: absolute; width: 70px; height: 90px;
+            background-size: contain; background-position: bottom center; background-repeat: no-repeat;
+            display: flex; justify-content: center; align-items: flex-start; 
+            transition: top 0.15s linear, left 0.15s linear, opacity 0.5s ease; z-index: 10;
+        }
+        
+        #player { background-color: rgba(56, 189, 248, 0.2); z-index: 20; border-radius: 8px; } 
+        #follower { background-color: rgba(46, 204, 113, 0.2); z-index: 15; border-radius: 8px; } 
+        
+        .ancient-npc { border-radius: 8px; }
+        #npc-song { background-color: rgba(155, 89, 182, 0.2); } 
+        #npc-xue { background-color: rgba(231, 76, 60, 0.2); } 
+        #npc-qi { background-color: rgba(230, 126, 34, 0.2); } 
+        
+        .modern-npc { display: none; border-radius: 8px; }
+        #modern-q1 { background-color: rgba(52, 152, 219, 0.2); }
+        #modern-q2 { background-color: rgba(231, 76, 60, 0.2); }
+        #modern-q3 { background-color: rgba(155, 89, 182, 0.2); }
+
+        .name-label { 
+            margin-top: -25px; font-size: 15px; font-weight: bold;
+            background: rgba(0,0,0,0.85); border: 1px solid #d4af37; font-family: 'Noto Sans TC', sans-serif;
+            padding: 2px 8px; border-radius: 4px; white-space: nowrap; pointer-events: none; color: #fff;
+        }
+
+        /* ========================================================================= */
+        /* 對話系統 (含左側立繪) */
+        /* ========================================================================= */
+        #ui-dialogue { 
+            position: absolute; bottom: 30px; left: 50%; transform: translateX(-50%); width: 85%; 
+            background: linear-gradient(135deg, rgba(15, 23, 42, 0.95) 0%, rgba(30, 41, 59, 0.98) 100%);
+            border: 2px solid #d4af37; padding: 20px 30px; border-radius: 16px; display: none; z-index: 150; 
+            box-shadow: 0 10px 30px rgba(0,0,0,0.7), inset 0 0 20px rgba(212, 175, 55, 0.15);
+            display: flex; gap: 30px; align-items: flex-start;
+        }
+
+        #dialogue-portrait {
+            width: 180px; height: 220px; 
+            background-color: rgba(0,0,0,0.5); border: 2px solid #d4af37; border-radius: 8px;
+            background-size: cover; background-position: top center; background-repeat: no-repeat;
+            flex-shrink: 0; box-shadow: 0 5px 15px rgba(0,0,0,0.5);
+            transition: background-image 0.3s ease;
+        }
+
+        .dialogue-content {
+            flex-grow: 1; display: flex; flex-direction: column; justify-content: center;
+        }
+        
+        #speaker { color: #f1c40f; font-size: 1.8rem; font-weight: bold; margin-bottom: 10px; font-family: 'Noto Serif TC', serif; }
+        #text { font-size: 1.35rem; line-height: 1.7; margin-bottom: 20px; color: #f8fafc; min-height: 80px;}
+        
+        .choices { display: flex; flex-direction: column; gap: 12px; }
+        .btn { 
+            background: rgba(30, 41, 59, 0.8); border: 1px solid #38bdf8; color: #fff; 
+            padding: 12px 20px; cursor: pointer; border-radius: 8px; font-size: 1.2rem; 
+            transition: all 0.2s ease; text-align: left; font-weight: normal;
+        }
+        .btn:hover { background: #38bdf8; color: #000; transform: translateX(10px); font-weight: bold; box-shadow: 0 0 15px rgba(56, 189, 248, 0.5); }
+    </style>
+</head>
+<body>
+
+    <div id="game-board">
+        
+        <!-- 背景音樂播放器 -->
+        <audio id="bgm-player" loop preload="auto"></audio>
+
+        <!-- 時空切換閃爍白幕 -->
+        <div id="transition-flash"></div>
+
+        <!-- 音樂切換按鈕 -->
+        <div id="music-toggle" onclick="toggleMusic()">🔊 音樂：開</div>
+
+        <!-- 開始畫面 -->
+        <div id="start-screen" class="screen-overlay">
+            <div class="title-text">孟子選：辭受之理</div>
+            <div class="subtitle-text">2D RPG 遊歷與跨時空抉擇</div>
+            
+            <!-- 本地音樂上傳面板 -->
+            <div class="music-setup-panel">
+                <h3>🎵 自訂本地背景音樂 (選填)</h3>
+                <label>
+                    <span>選擇古代 BGM：</span>
+                    <input type="file" id="upload-ancient-bgm" accept="audio/*">
+                </label>
+                <label>
+                    <span>選擇現代 BGM：</span>
+                    <input type="file" id="upload-modern-bgm" accept="audio/*">
+                </label>
+            </div>
+
+            <button class="start-btn" onclick="startGame()">▼ 點擊開始周遊列國 ▼</button>
+        </div>
+
+        <!-- 結束畫面 -->
+        <div id="end-screen" class="screen-overlay hidden" onclick="resetToTitle()">
+            <div class="title-text" id="end-title" style="font-size: 4.5rem; margin-bottom: 10px;">結局標題</div>
+            <div class="subtitle-text" id="end-desc" style="max-width: 900px; margin-bottom: 20px;">結局敘述</div>
+            <button class="start-btn gold">▼ 點擊畫面 返回封面重新輪迴 ▼</button>
+        </div>
+
+        <!-- HUD 面板 -->
+        <div id="hud-container">
+            <div class="hud-box">
+                <span style="color:#38bdf8; font-weight:bold;">⌨️ 操作說明</span><br>
+                <b>WASD</b> 或 <b>方向鍵</b> 移動<br>
+                靠近各國君王自動觸發事件
+            </div>
+            <div class="hud-box" style="text-align: right;">
+                <span style="color:#f1c40f; font-weight:bold;">👑 隱藏傾向數值</span><br>
+                孟子之智：<span id="score-wisdom" class="score-highlight">0</span><br>
+                功利：<span id="score-pragmatic">0</span> | 理想：<span id="score-ideal">0</span>
+            </div>
+        </div>
+        
+        <!-- 系統提示 -->
+        <div id="notification">傾向發生了變化...</div>
+        
+        <!-- ================= 古代 NPC ================= -->
+        <div class="entity ancient-npc" id="npc-song"><div class="name-label" style="color:#d4af37;">宋君</div></div>
+        <div class="entity ancient-npc" id="npc-xue"><div class="name-label" style="color:#e74c3c;">薛君</div></div>
+        <div class="entity ancient-npc" id="npc-qi"><div class="name-label" style="color:#e67e22;">齊王</div></div>
+        
+        <!-- ================= 現代 NPC ================= -->
+        <div class="entity modern-npc" id="modern-q1"><div class="name-label" style="color:#3498db;">財團代表</div></div>
+        <div class="entity modern-npc" id="modern-q2"><div class="name-label" style="color:#e74c3c;">爭議富商</div></div>
+        <div class="entity modern-npc" id="modern-q3"><div class="name-label" style="color:#9b59b6;">科技巨頭</div></div>
+
+        <!-- 玩家隊伍 -->
+        <div class="entity" id="player"><div id="player-label" class="name-label" style="color:#38bdf8;">孟子</div></div>
+        <div class="entity" id="follower"><div id="follower-label" class="name-label" style="color:#2ecc71;">陳臻</div></div>
+        
+        <!-- 對話系統 (含左側立繪) -->
+        <div id="ui-dialogue" style="display: none;">
+            <div id="dialogue-portrait"></div>
+            <div class="dialogue-content">
+                <div id="speaker"></div>
+                <div id="text"></div>
+                <div class="choices" id="choices"></div>
+            </div>
+        </div>
+
+    </div>
+
+    <script>
+        // =========================================================================
+        // 🌟🌟🌟 【素材設定區】 🌟🌟🌟
+        // =========================================================================
+        const ASSETS = {
+            // 預設音樂 (會被玩家上傳的檔案覆蓋)
+            bgmAncient: "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3", 
+            bgmModern: "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-9.mp3",
+
+            // 地圖背景與人物小圖 (Sprite)
+            mapAncient: "https://i.postimg.cc/pXD1nB9S/de-tu.jpg", 
+            playerAncientSprite: "https://i.postimg.cc/kXxhtyV1/meng-zi.png", 
+            followerAncientSprite: "https://i.postimg.cc/pXD1nB90/chen-zhen.png", 
+            songKingSprite: "https://i.postimg.cc/X7MzJPJ6/song-jun.png", 
+            xueKingSprite:  "https://i.postimg.cc/L6z0ZVY8/xue-jun.png", 
+            qiKingSprite:   "https://i.postimg.cc/c4Q58cg1/qi-wang.png",
+            
+            mapModern: "https://i.postimg.cc/4nRhV8b8/xian-dai-de-tu.jpg",
+            playerModernSprite: "https://i.postimg.cc/K4hgB9rD/xian-dai-meng-zi.png",
+            followerModernSprite: "https://i.postimg.cc/nMfQBdYK/xian-dai-chen-zhen.png",
+            modernCorpSprite: "https://i.postimg.cc/JtCBZTcP/cai-tuan.png",
+            modernRichSprite: "https://i.postimg.cc/WtcJg968/fu-shang.png",
+            modernTechSprite: "https://i.postimg.cc/4nRhV8bw/ju-tou.png",
+
+            // 對話框大型立繪 (Portraits)
+            portraitMenciusAncient: "https://i.postimg.cc/P5XMc7H1/meng-zi2.png",
+            portraitChenAncient: "https://i.postimg.cc/13mKTdSp/chen-zhen2.png",
+            portraitSong: "https://i.postimg.cc/Z5Hw5SHc/song-jun2.png",
+            portraitXue: "https://i.postimg.cc/x156125q/xue-jun2.png",
+            portraitQi: "https://i.postimg.cc/YCrxVP7W/qi-wang2.png",
+            portraitMenciusModern: "https://i.postimg.cc/0ynVysnn/xian-dai-meng-zi2.png",
+            portraitChenModern: "https://i.postimg.cc/hGGpJ5Zr/xian-dai-chen-zhen2.png",
+            portraitCorp: "https://i.postimg.cc/k4bNK3Qx/cai-tuan2.png",
+            portraitRich: "https://i.postimg.cc/3Rvjm5Xj/fu-shang2.png",
+            portraitTech: "https://i.postimg.cc/5tGqXNCg/ju-tou2.png",
+            portraitSystem: "https://i.postimg.cc/cLxcjzW3/pang-bai.png"
+        };
+
+        // =========================================================================
+        // 本地音樂上傳處理與控制
+        // =========================================================================
+        document.getElementById('upload-ancient-bgm').addEventListener('change', function(e) {
+            const file = e.target.files[0];
+            if (file) ASSETS.bgmAncient = URL.createObjectURL(file);
+        });
+
+        document.getElementById('upload-modern-bgm').addEventListener('change', function(e) {
+            const file = e.target.files[0];
+            if (file) ASSETS.bgmModern = URL.createObjectURL(file);
+        });
+
+        let isMusicPlaying = true;
+        const bgmPlayer = document.getElementById('bgm-player');
+        bgmPlayer.volume = 0.4; 
+
+        function toggleMusic() {
+            isMusicPlaying = !isMusicPlaying;
+            const btn = document.getElementById('music-toggle');
+            if (isMusicPlaying) {
+                bgmPlayer.play().catch(e => console.log(e));
+                btn.innerText = "🔊 音樂：開";
+                btn.style.borderColor = "#38bdf8";
+                btn.style.color = "#fff";
+            } else {
+                bgmPlayer.pause();
+                btn.innerText = "🔇 音樂：關";
+                btn.style.borderColor = "#e74c3c";
+                btn.style.color = "#e74c3c";
+            }
+        }
+
+        // =========================================================================
+        // 圖片預載入與初始化
+        // =========================================================================
+        window.onload = () => {
+            Object.values(ASSETS).forEach(val => { 
+                if(val && (val.includes('.jpg') || val.includes('.png') || val.includes('images') || val.includes('placeholder'))) {
+                    new Image().src = val; 
+                }
+            });
+            loadAncientAssets();
+        };
+
+        function loadAncientAssets() {
+            document.getElementById('game-board').style.backgroundImage = `url('${ASSETS.mapAncient}')`;
+            document.getElementById('player').style.backgroundImage = `url('${ASSETS.playerAncientSprite}')`;
+            document.getElementById('follower').style.backgroundImage = `url('${ASSETS.followerAncientSprite}')`;
+            document.getElementById('npc-song').style.backgroundImage = `url('${ASSETS.songKingSprite}')`;
+            document.getElementById('npc-xue').style.backgroundImage = `url('${ASSETS.xueKingSprite}')`;
+            document.getElementById('npc-qi').style.backgroundImage = `url('${ASSETS.qiKingSprite}')`;
+            
+            document.getElementById('player-label').innerText = "孟子";
+            document.getElementById('follower-label').innerText = "陳臻";
+        }
+
+        // =========================================================================
+        // 遊戲核心邏輯
+        // =========================================================================
+        let player = { x: 640, y: 360, el: document.getElementById('player') };
+        let follower = { x: 550, y: 360, el: document.getElementById('follower'), history: [] };
+        let stats = { wisdom: 0, pragmatic: 0, ideal: 0 };
+        
+        let npcs = {};           
+        let modernEvents = {};   
+        
+        let inDialogue = false;
+        let gameStarted = false;
+        let isGameOver = false;
+        let modernPhase = false;
+        
+        let dialogQueue = [];
+        let pendingChoices = [];
+        let resolvingNpc = null;
+
+        const SCREEN_W = 1280, SCREEN_H = 720, ENTITY_W = 70, ENTITY_H = 90;
+        const uiDialogue = document.getElementById('ui-dialogue');
+        const uiSpeaker = document.getElementById('speaker');
+        const uiText = document.getElementById('text');
+        const uiChoices = document.getElementById('choices');
+        const uiPortrait = document.getElementById('dialogue-portrait');
+
+        function initGameData() {
+            // 古代歷史事件
+            npcs = {
+                song: { 
+                    id: 'npc-song', x: 1050, y: 150, active: true,
+                    dialogue: [
+                        { speaker: "宋君", text: "孟夫子，寡人聽聞您即將啟程，離開宋國了？" },
+                        { speaker: "孟子", text: "正是。軻將繼續周遊列國，遊說諸侯施行仁政。" },
+                        { speaker: "宋君", text: "先生此去路途遙遠，舟車勞頓。寡人特備下七十鎰黃金，作為先生的『贐』(旅費)。請務必收下。" },
+                        { speaker: "孟子", text: "宋君厚意，軻便收下了。" },
+                        { speaker: "陳臻", text: "（老師平時清高，今天居然收下了？這可是七十鎰鉅款啊...）" },
+                        { speaker: "孟子", text: "陳臻，你面帶疑惑。你認為我當時為何收下這筆錢？" }
+                    ],
+                    choices: [
+                        {t: "依古禮『行者必以贐』，此乃合乎人情義理，坦然收下。", type: "wisdom", r: "孟子點頭：「順應禮制，不為清高而拘泥。」"}, 
+                        {t: "既然出手大方，不拿白不拿，收下當旅途伙食費。", type: "pragmatic", r: "孟子搖頭：「只重利益而忽略了收受的『理』，非君子所為。」"},
+                        {t: "其實根本不該拿，君子應當安貧樂道，失節事大！", type: "ideal", r: "孟子嘆息：「過度迂腐，不收正當援助，我們又如何遠行行道？」"}
+                    ]
+                },
+                xue: { 
+                    id: 'npc-xue', x: 850, y: 500, active: true,
+                    dialogue: [
+                        { speaker: "薛君", text: "孟夫子！寡人剛得到密報，城中有歹徒欲對您不利！" },
+                        { speaker: "孟子", text: "哦？竟有此事。" },
+                        { speaker: "薛君", text: "先生安危至關重要。這五十鎰黃金請您速速收下，快去購置兵器、招募護衛防身！" },
+                        { speaker: "孟子", text: "局勢險惡，承蒙薛君庇護。此金為護衛學派眾人周全，軻斷然受之。" },
+                        { speaker: "陳臻", text: "（老師又收下了...原來這筆錢是為了保命防身。）" },
+                        { speaker: "孟子", text: "薛君送金，我也收下了。陳臻，你覺得這又是為何？" }
+                    ],
+                    choices: [
+                        {t: "此乃『為兵餽之』。為保生命以延續正道，斷然受之。", type: "wisdom", r: "孟子微哂：「防備兵害，合情合理。」"}, 
+                        {t: "招兵買馬，建立我們自己的私人武裝勢力！", type: "pragmatic", r: "孟子訓斥：「荒唐！我們是推廣仁政的儒者，豈能擁兵自重？」"},
+                        {t: "君子死生有命，不該靠諸侯的錢來買武器，有損斯文。", type: "ideal", r: "孟子搖頭：「若遭不測，未來如何兼善天下？不該過於執拗。」"}
+                    ]
+                },
+                qi: { 
+                    id: 'npc-qi', x: 150, y: 350, active: true,
+                    dialogue: [
+                        { speaker: "齊王", text: "孟軻！寡人今日心情大好，決定重重賞你！這是一百鎰純度極高的『兼金』！" },
+                        { speaker: "孟子", text: "軻無功不受祿，不知大王為何賞賜？" },
+                        { speaker: "齊王", text: "只要你日後留在齊國，在朝堂上多替寡人說些好話，榮華富貴享之不盡！" },
+                        { speaker: "孟子", text: "大王請收回。軻在此安居無事，既無遠行之需，亦無兵刃之危。" },
+                        { speaker: "齊王", text: "天下多少人求之不得，你竟敢當眾拒絕寡人？" },
+                        { speaker: "孟子", text: "『未有處也，是貨之也』。大王毫無名義便贈予鉅款，想用財貨收買我嗎？告辭！" },
+                        { speaker: "陳臻", text: "（老師面對齊王最豐厚的重金，竟然連看都不看一眼就拒絕了...）" },
+                        { speaker: "孟子", text: "此刻我們安居學堂，面對齊王重金，陳臻，你明白我為何堅決拒絕嗎？" }
+                    ],
+                    choices: [
+                        {t: "『未有處也，是貨之也』。無故贈金意在收買，堅決拒絕。", type: "wisdom", r: "孟子大悅：「正是如此。堅守底線，天下無可用錢收買之君子。」"}, 
+                        {t: "先收下再說，拿了錢大不了不辦事，擴充學派資金要緊。", type: "pragmatic", r: "孟子怒道：「君子豈可言而無信、貪圖無義之財？」"},
+                        {t: "因為齊王名聲不好，拿他的錢會被天下人恥笑。", type: "ideal", r: "孟子搖頭：「君子論跡論心，拒絕的核心在於『無正當名義』，而非單純厭惡其人。」"}
+                    ]
+                }
+            };
+
+            // 現代事件
+            modernEvents = {
+                q1: {
+                    id: 'modern-q1', x: 200, y: 250, active: true,
+                    dialogue: [
+                        { speaker: "財團代表", text: "孟大師！您的知識頻道流量很高，我們集團想砸重金買下業配，請您宣傳我們的新款保健品！" },
+                        { speaker: "孟子", text: "陳臻，遇到這種鉅額的商業贊助，你接不接？" }
+                    ],
+                    choices: [
+                        {t: "只要價錢到位就接！有資金才能把頻道做大。", type: "pragmatic", r: "孟子嘆息：「這便是只問結果的功利主義。失去底線，便淪為資本的工具。」"},
+                        {t: "審慎評估。若產品優良且不干涉客觀性，便接受贊助。", type: "wisdom", r: "孟子點頭：「善哉！『義為本、利為用』。合乎理，收受利益便能擴大影響力。」"},
+                        {t: "絕對不接！收了財團的錢就代表墮落，我要保持清高！", type: "ideal", r: "孟子搖頭：「一概拒利，容易脫離現實。若連傳遞價值的資源都沒有，如何兼善天下？」"}
+                    ]
+                },
+                q2: {
+                    id: 'modern-q2', x: 1000, y: 300, active: true,
+                    dialogue: [
+                        { speaker: "爭議富商", text: "聽說你們育幼院快撐不下去啦？我願意捐三千萬蓋大樓，唯一的條件就是大樓必須以我的名字命名！" },
+                        { speaker: "孟子", text: "這富商平時遊走法律邊緣，爭議不斷。陳臻，這筆救命錢，你接受嗎？" }
+                    ],
+                    choices: [
+                        {t: "與他交涉。若願『匿名捐款』便收下；若只為洗白好名聲則拒絕。", type: "wisdom", r: "孟子微哂：「孺子可教也。論跡論心，既不被綁架，也不讓自己成為惡人洗白的工具。」"},
+                        {t: "當然收！育幼院缺錢，管他錢怎麼來的，能幫到小孩就好。", type: "pragmatic", r: "孟子皺眉：「若收了此錢，形同為惡人背書。失去大義，縱能解一時之渴，卻敗壞社會風氣。」"},
+                        {t: "堅決不收！寧可過苦日子，也不能成為惡商洗白的工具。", type: "ideal", r: "孟子沉思：「雖保全了名節，但若有交涉的餘地而直接放棄，或許也錯失了引導對方行善的契機。」"}
+                    ]
+                },
+                q3: {
+                    id: 'modern-q3', x: 600, y: 550, active: true,
+                    dialogue: [
+                        { speaker: "科技巨頭", text: "孟教授，你們團隊研發的 AI 醫療軟體太神了！我們出天價買斷獨家專利！" },
+                        { speaker: "孟子", text: "這軟體若賣給他，將被高價壟斷；但開源社群希望我們完全免費，這樣我們團隊會破產。陳臻，你怎麼選？" }
+                    ],
+                    choices: [
+                        {t: "賣給巨頭！我辛苦研發，拿天價報酬是理所當然的。", type: "pragmatic", r: "孟子嘆道：「只見眼前暴利，罔顧天下蒼生之苦。這與唯利是圖的商賈有何異？」"},
+                        {t: "雙軌制。對公立醫院免費，對商業機構收費，兼顧生存與貢獻。", type: "wisdom", r: "孟子大悅：「極好！此舉既能維持自身研發之需，又不失仁愛濟世之心。這便是中道實踐！」"},
+                        {t: "完全免費！醫療不該壟斷，就算我破產也要造福人類。", type: "ideal", r: "孟子嘆息：「雖然精神可嘉，但若研發者皆因此破產，未來還有誰能持續為蒼生謀福？」"}
+                    ]
+                }
+            };
+            
+            // 重置古代 NPC 畫面
+            let ancientEls = document.querySelectorAll('.ancient-npc');
+            ancientEls.forEach(el => {
+                let n = npcs[el.id.replace('npc-', '')];
+                if(n) {
+                    el.style.left = n.x + 'px'; el.style.top = n.y + 'px';
+                    el.style.display = 'flex'; el.style.opacity = '1'; el.style.filter = 'grayscale(0%)';
+                }
+            });
+
+            // 初始化並隱藏現代 NPC 畫面
+            let modernEls = document.querySelectorAll('.modern-npc');
+            modernEls.forEach(el => {
+                let n = modernEvents[el.id.replace('modern-', '')];
+                if(n) {
+                    let modernSprite = el.id === 'modern-q1' ? ASSETS.modernCorpSprite : (el.id === 'modern-q2' ? ASSETS.modernRichSprite : ASSETS.modernTechSprite);
+                    el.style.backgroundImage = `url('${modernSprite}')`;
+                    el.style.left = n.x + 'px'; el.style.top = n.y + 'px';
+                    el.style.display = 'none'; el.style.opacity = '1'; el.style.filter = 'grayscale(0%)';
+                }
+            });
+        }
+
+        // =========================================================================
+        // 流程控制
+        // =========================================================================
+        function showNotification(text) {
+            const notif = document.getElementById('notification');
+            notif.textContent = text;
+            notif.classList.add('show');
+            setTimeout(() => notif.classList.remove('show'), 2500);
+        }
+
+        function startGame() {
+            if(gameStarted) return;
+            gameStarted = true;
+            isGameOver = false;
+            modernPhase = false;
+            
+            document.getElementById('start-screen').classList.add('hidden');
+            document.getElementById('end-screen').classList.add('hidden');
+            
+            stats = { wisdom: 0, pragmatic: 0, ideal: 0 };
+            updateHUD();
+            
+            player.x = 640; player.y = 360;
+            follower.x = 550; follower.y = 360; follower.history = [];
+            updateEntityPos(player); updateEntityPos(follower);
+            
+            loadAncientAssets();
+            initGameData();
+            
+            bgmPlayer.src = ASSETS.bgmAncient;
+            if (isMusicPlaying) bgmPlayer.play().catch(e => console.log("等待互動"));
+            
+            window.focus(); 
+        }
+
+        window.resetToTitle = () => {
+            if(!isGameOver) return;
+            gameStarted = false;
+            isGameOver = false;
+            modernPhase = false;
+            inDialogue = false;
+            
+            uiDialogue.style.display = 'none';
+            document.getElementById('end-screen').classList.add('hidden');
+            document.getElementById('start-screen').classList.remove('hidden');
+            
+            bgmPlayer.pause();
+            bgmPlayer.currentTime = 0;
+            
+            loadAncientAssets();
+            initGameData(); 
+        };
+
+        function updateHUD() {
+            document.getElementById('score-wisdom').innerText = stats.wisdom;
+            document.getElementById('score-pragmatic').innerText = stats.pragmatic;
+            document.getElementById('score-ideal').innerText = stats.ideal;
+        }
+
+        function updateEntityPos(ent) {
+            ent.el.style.top = ent.y + 'px';
+            ent.el.style.left = ent.x + 'px';
+        }
+
+        // =========================================================================
+        // 鍵盤移動與碰撞
+        // =========================================================================
+        document.addEventListener('keydown', (e) => {
+            if(inDialogue || !gameStarted || isGameOver) return;
+            
+            if(['ArrowUp','ArrowDown','ArrowLeft','ArrowRight','w','a','s','d'].includes(e.key.toLowerCase())) {
+                e.preventDefault();
+            }
+            
+            let oldX = player.x;
+            let oldY = player.y;
+            const speed = 25; 
+            
+            const key = e.key.toLowerCase();
+            if (key === 'arrowup' || key === 'w') player.y = Math.max(0, player.y - speed);
+            if (key === 'arrowdown' || key === 's') player.y = Math.min(SCREEN_H - ENTITY_H, player.y + speed);
+            if (key === 'arrowleft' || key === 'a') player.x = Math.max(0, player.x - speed);
+            if (key === 'arrowright' || key === 'd') player.x = Math.min(SCREEN_W - ENTITY_W, player.x + speed);
+            
+            if (player.x !== oldX || player.y !== oldY) {
+                updateEntityPos(player);
+                
+                follower.history.push({x: oldX, y: oldY});
+                if (follower.history.length > 3) {  
+                    let pos = follower.history.shift();
+                    follower.x = pos.x; follower.y = pos.y;
+                    updateEntityPos(follower);
+                }
+                checkCollision();
+            }
+        });
+
+        function checkCollision() {
+            const currentTargets = modernPhase ? modernEvents : npcs;
+            for (const key in currentTargets) {
+                const target = currentTargets[key];
+                if (!target.active) continue;
+                
+                const dist = Math.hypot(player.x - target.x, player.y - target.y);
+                if (dist < 85) { 
+                    startMapDialogue(target);
+                    return;
+                }
+            }
+        }
+
+        // =========================================================================
+        // 多段對話與立繪切換系統
+        // =========================================================================
+        function getPortraitUrl(speakerName) {
+            if (speakerName.includes('孟子')) return modernPhase ? ASSETS.portraitMenciusModern : ASSETS.portraitMenciusAncient;
+            if (speakerName.includes('陳臻')) return modernPhase ? ASSETS.portraitChenModern : ASSETS.portraitChenAncient;
+            if (speakerName.includes('宋君')) return ASSETS.portraitSong;
+            if (speakerName.includes('薛君')) return ASSETS.portraitXue;
+            if (speakerName.includes('齊王')) return ASSETS.portraitQi;
+            if (speakerName.includes('財團')) return ASSETS.portraitCorp;
+            if (speakerName.includes('富商')) return ASSETS.portraitRich;
+            if (speakerName.includes('巨頭')) return ASSETS.portraitTech;
+            return ASSETS.portraitSystem;
+        }
+
+        function startMapDialogue(target) {
+            inDialogue = true;
+            resolvingNpc = target;
+            dialogQueue = [...target.dialogue];
+            pendingChoices = target.choices;
+            
+            // 彈開玩家
+            if(player.x > target.x) player.x += 40; else player.x -= 40;
+            if(player.y > target.y) player.y += 40; else player.y -= 40;
+            player.x = Math.max(0, Math.min(SCREEN_W - ENTITY_W, player.x));
+            player.y = Math.max(0, Math.min(SCREEN_H - ENTITY_H, player.y));
+            updateEntityPos(player);
+            
+            follower.history = [];
+            follower.x = player.x + 50; follower.y = player.y;
+            follower.x = Math.max(0, Math.min(SCREEN_W - ENTITY_W, follower.x));
+            updateEntityPos(follower);
+
+            uiDialogue.style.display = 'flex'; 
+            window.advanceDialogue(); 
+        }
+
+        window.advanceDialogue = () => {
+            if (dialogQueue.length > 0) {
+                const line = dialogQueue.shift();
+                
+                uiPortrait.style.backgroundImage = `url('${getPortraitUrl(line.speaker)}')`;
+                uiSpeaker.innerText = line.speaker;
+                uiText.innerHTML = line.text.replace(/\n/g, '<br>');
+                
+                if(line.speaker.includes('孟子')) uiSpeaker.style.color = '#38bdf8';
+                else if(line.speaker.includes('陳臻')) uiSpeaker.style.color = '#2ecc71';
+                else uiSpeaker.style.color = '#f472b6'; 
+
+                uiChoices.innerHTML = '<button class="btn" style="text-align:center; background:#1e293b;" onclick="advanceDialogue()">▼ 繼續</button>';
+            } else {
+                showChoices(); 
+            }
+        };
+
+        function showChoices() {
+            uiPortrait.style.backgroundImage = `url('${getPortraitUrl("系統")}')`;
+            uiSpeaker.innerText = "【請作出抉擇】";
+            uiSpeaker.style.color = "#f1c40f";
+            uiText.innerHTML = "請根據孟子的教誨，選擇最合適的解讀與做法：";
+            uiChoices.innerHTML = '';
+            
+            pendingChoices.forEach(c => {
+                const btn = document.createElement('button');
+                btn.className = 'btn';
+                btn.innerText = c.t;
+                btn.onclick = () => {
+                    stats[c.type]++;
+                    updateHUD();
+                    let effectMsg = c.type === 'wisdom' ? "獲得【孟子之智】" : (c.type === 'pragmatic' ? "傾向【功利現實】" : "傾向【極端理想】");
+                    showNotification(effectMsg); 
+                    
+                    if (resolvingNpc) {
+                        resolvingNpc.active = false; 
+                        let npcEl = document.getElementById(resolvingNpc.id);
+                        npcEl.style.opacity = '0.5'; 
+                        npcEl.style.filter = 'grayscale(80%)'; 
+                    }
+                    
+                    uiPortrait.style.backgroundImage = `url('${getPortraitUrl("孟子")}')`;
+                    uiSpeaker.innerText = modernPhase ? "【現代孟子】" : "【孟子之理】";
+                    uiSpeaker.style.color = "#38bdf8";
+                    uiText.innerHTML = c.r || "孟子默默將你的選擇記在心中。";
+                    
+                    uiChoices.innerHTML = `<button class="btn" style="text-align:center; background:#38bdf8; color:#000; font-weight:bold;" onclick="endDialogueFlow()">結束對話，繼續探索</button>`;
+                };
+                uiChoices.appendChild(btn);
+            });
+        }
+
+        window.endDialogueFlow = () => {
+            uiDialogue.style.display = 'none';
+            setTimeout(() => { 
+                inDialogue = false; 
+                resolvingNpc = null;
+                checkPhaseTransition(); 
+            }, 100);
+        };
+
+        // =========================================================================
+        // 時空切換與結局判斷
+        // =========================================================================
+        function checkPhaseTransition() {
+            if (!modernPhase) {
+                const ancientDone = !npcs.song.active && !npcs.xue.active && !npcs.qi.active;
+                if (ancientDone) {
+                    modernPhase = true;
+                    inDialogue = true; 
+                    
+                    const flash = document.getElementById('transition-flash');
+                    flash.classList.remove('hidden');
+                    flash.style.opacity = '1';
+
+                    bgmPlayer.src = ASSETS.bgmModern;
+                    if(isMusicPlaying) bgmPlayer.play().catch(e=>console.log(e));
+
+                    setTimeout(() => { 
+                        document.getElementById('game-board').style.backgroundImage = `url('${ASSETS.mapModern}')`;
+                        document.getElementById('player').style.backgroundImage = `url('${ASSETS.playerModernSprite}')`;
+                        document.getElementById('follower').style.backgroundImage = `url('${ASSETS.followerModernSprite}')`;
+                        document.getElementById('player-label').innerText = "現代孟子";
+                        document.getElementById('follower-label').innerText = "現代陳臻";
+                        
+                        document.querySelectorAll('.ancient-npc').forEach(el => el.style.display = 'none');
+                        document.querySelectorAll('.modern-npc').forEach(el => el.style.display = 'flex');
+                        
+                        player.x = 640; player.y = 360; updateEntityPos(player);
+                        follower.x = 550; follower.y = 360; updateEntityPos(follower); follower.history = [];
+                        
+                        flash.style.opacity = '0';
+
+                        uiPortrait.style.backgroundImage = `url('${getPortraitUrl("系統")}')`;
+                        uiSpeaker.innerText = "【時空跳躍】";
+                        uiSpeaker.style.color = "#f1c40f";
+                        uiText.innerHTML = "一陣白光閃過...<br><br>孟子的智慧，跨越了時空。我們來到了千年後的現代社會...<br>去尋找地圖上的現代事件，接受最終的考驗吧！";
+                        uiChoices.innerHTML = '<button class="btn" style="text-align:center; background:#38bdf8; color:#000; font-weight:bold;" onclick="window.endDialogueFlow()">開始探索</button>';
+                        uiDialogue.style.display = 'flex';
+                    }, 1000);
+                }
+            } else {
+                const modernDone = !modernEvents.q1.active && !modernEvents.q2.active && !modernEvents.q3.active;
+                if (modernDone) {
+                    showEnding();
+                }
+            }
+        }
+
+        function showEnding() {
+            uiDialogue.style.display = 'none';
+            isGameOver = true;
+            
+            const endScreen = document.getElementById('end-screen');
+            const endTitle = document.getElementById('end-title');
+            const endDesc = document.getElementById('end-desc');
+            
+            if (stats.wisdom >= 5) {
+                endTitle.innerText = "True Ending：有原則的實用主義";
+                endTitle.style.color = "#f1c40f";
+                endDesc.innerHTML = "您完美展現了儒家的大智慧！<br>義為本、利為用，審時度義，成功在亂世與現代中貫徹了道義。";
+            } else if (stats.pragmatic >= 3) {
+                endTitle.innerText = "Bad Ending：功利現實的迷失";
+                endTitle.style.color = "#e74c3c";
+                endDesc.innerHTML = "您似乎太容易向現實利益低頭了。<br>若凡事皆以功利為考量，最終將淪為資本與權力的工具。";
+            } else if (stats.ideal >= 3) {
+                endTitle.innerText = "Bad Ending：極端理想的孤島";
+                endTitle.style.color = "#3498db";
+                endDesc.innerHTML = "您過度執著於清高與純粹。<br>一味拒絕合理的援助，在殘酷的現實中連生存都成問題，如何兼善天下？";
+            } else {
+                endTitle.innerText = "Normal Ending：尚未參透的凡人";
+                endTitle.style.color = "#ecf0f1";
+                endDesc.innerHTML = "您的思想仍有迷惘，時而功利時而清高。<br>辭受取予之間，還需多多體會『惟當於理』的智慧。";
+            }
+            
+            endScreen.classList.remove('hidden');
+        }
+    </script>
+</body>
+</html>
